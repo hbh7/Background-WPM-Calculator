@@ -9,7 +9,7 @@ debug = True
 ignoreKeys = ["shift"]
 shortcutKeys = ["ctrl", "right ctrl", "alt", "alt gr", "left windows", "right windows"]
 additionalValidChars = ["'", "\""]
-minWordSize = 2
+minWordSize = 3  # Note that this includes the space at the end of words
 maxWordSize = 16
 
 # After this many seconds without a keypress, a word's progress is reset and not added to the WPM count.
@@ -19,9 +19,10 @@ wordTimeoutSeconds = 3
 """ Wrapper function for only doing certain prints if the program is running in debug mode. """
 def dPrint(*args):
     if debug:
-        print(args)
+        print(*args)
 
 
+""" Main class that helps to track all information for WPM calculations """
 class WPMCalculator:
     # Setup instance vars
     # Handle overall statistic tracking
@@ -35,9 +36,9 @@ class WPMCalculator:
     wordInProgress = False
     wordLength = 0
     # Set these times to some placeholder that doesn't matter but isn't None
-    wordStartTime = time.time()
-    lastLetterTime = time.time()
-    lastWordEndTime = time.time()
+    wordStartTime = time.time() - wordTimeoutSeconds
+    lastLetterTime = time.time() - wordTimeoutSeconds
+    lastWordEndTime = time.time() - wordTimeoutSeconds
     shortcutSequenceLockout = False
 
     """ Calculates and returns the WPM using self.numWords and self.typingTime, or provided values if present """
@@ -103,9 +104,8 @@ class WPMCalculator:
 
     """ Handles whenever a keyboard event is received """
     def processEvent(self, event):
-        dPrint("New Keypress:", event.to_json())
-
         if event.event_type == keyboard.KEY_DOWN:
+            dPrint("New Keypress:", event.to_json())
             # Ignore certain keys
             if event.name in ignoreKeys:
                 return
@@ -113,7 +113,7 @@ class WPMCalculator:
             # Reset previous word if it's been too long since the last character has been typed
             # Note that this does not mean a new word can't also start after this
             if self.wordInProgress and event.time - self.lastLetterTime > wordTimeoutSeconds:
-                dPrint('Time since last typed character exceeded, resetting word progress.')
+                dPrint('Time since last typed character exceeded, saving and resetting word progress.')
                 self.recordWord()
 
             # Shortcut sequences - don't start a word if a shortcut is being used

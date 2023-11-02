@@ -11,6 +11,7 @@ Lots of work to still do, stay tuned!
 - Numbers and other special characters will end and discard any in-progress word.
 - Backspace will end and discard any in-progress word. This program (currently) does not make any attempt to measure typing accuracy. 
 - Shortcut sequences and related should be discarded. Ex: control+c, alt+f4, etc. 
+- Assuming you start the next sentence (as defined by ending with a period and followed by a space or two) within the timeout period, then it should record the time between words.  
 
 ## Setup Info
 This script was written for Windows environments, but as long as your system can run `Python 3`, any OS will probably work just fine. You also need to install the required packages using `pip install -r requirements.txt`. Afterward, you can use Python 3 to run the script, such as via `python main.py`. 
