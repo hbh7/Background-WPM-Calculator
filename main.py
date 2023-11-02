@@ -7,6 +7,7 @@ import string
 debug = True
 
 ignoreKeys = ["shift"]
+shortcutKeys = ["ctrl", "right ctrl", "alt", "alt gr", "left windows", "right windows"]
 additionalValidChars = ["'", "\""]
 minWordSize = 2
 maxWordSize = 16
@@ -25,15 +26,19 @@ class WPMCalculator:
     # Setup instance vars
     # Handle overall statistic tracking
     numWords = 0
+    # Hashmaps with keys of length and values of number of words / word type times for those lengths
+    numWordsByLength = {}
+    wordTimeByLength = {}
     typingTime = 0
 
-    # Handle tracking word progression information
-    wordLength = 0
-
+    # Handle tracking current word progression information
     wordInProgress = False
+    wordLength = 0
     wordStartTime = time.time()  # Set it to some placeholder that doesn't matter but isn't None
     lastLetterTime = time.time()
+    shortcutSequenceLockout = False
 
+    """ Calculates and returns the WPM using self.numWords and self.typingTime, or provided values if present """
     def calculateWPM(self, numWords=None, typingTime=None):
         # Can't set self.x variables as a default arguments, so we use these if statements as a workaround
         if numWords is None:
@@ -42,11 +47,57 @@ class WPMCalculator:
             typingTime = self.typingTime
         return numWords / (typingTime / 60)
 
+    """ Records the last time a letter was typed """
+    def recordLastLetterTime(self, event):
+        self.lastLetterTime = event.time
+
+    """ Starts a new word by updating word tracking information """
+    def startWord(self, event):
+        self.wordInProgress = True
+        self.wordStartTime = event.time
+        self.wordLength = 1
+
+    """ Continues a word by adding another letter and time amount to the word tracking information """
+    def continueWord(self):
+        self.wordLength += 1
+
+    """ Resets word tracking information """
+    def resetWord(self):
+        self.wordInProgress = False
+        self.wordLength = 0
+
+    """ Records information about the current word, then prepares for the next word (resets word tracking information) """
+    def recordWord(self, event=None):
+        # Validate word size
+        if minWordSize <= self.wordLength <= maxWordSize:
+            # If valid, add to word count and typing time
+            self.numWords += 1
+            if event is not None:
+                wordTime = event.time - self.wordStartTime
+            else:
+                wordTime = self.lastLetterTime - self.wordStartTime
+            self.typingTime += wordTime
+            dPrint(f'Current word length: {self.wordLength}, time: {wordTime}, WPM: {self.calculateWPM(1, wordTime)}')
+            print(f'Current words: {self.numWords}, time: {self.typingTime}, WPM: {self.calculateWPM()}')
+        else:
+            dPrint("Word too short, ignoring")
+
+        self.resetWord()
+
+    """ Helper function to handle shortcut sequence keys by setting/unsetting tracking values """
+    def handleShortcutKeys(self, event):
+        if event.event_type == keyboard.KEY_DOWN:
+            self.shortcutSequenceLockout = True
+            self.resetWord()
+
+        elif event.event_type == keyboard.KEY_UP:
+            self.shortcutSequenceLockout = False
+
+    """ Handles whenever a keyboard event is received """
     def processEvent(self, event):
+        dPrint("New Keypress:", event.to_json())
 
         if event.event_type == keyboard.KEY_DOWN:
-            dPrint("New Keypress:", event.to_json())
-
             # Ignore certain keys
             if event.name in ignoreKeys:
                 return
@@ -55,52 +106,46 @@ class WPMCalculator:
             # Note that this does not mean a new word can't also start after this
             if event.time - self.lastLetterTime > wordTimeoutSeconds:
                 dPrint('Time since last typed character exceeded, resetting word progress.')
-                self.wordLength = 0
-                self.wordInProgress = False
+                self.recordWord()
                 # TODO: if a word was in progress, check if it should have been added to the count.
 
+            # Shortcut sequences - don't start a word if a shortcut is being used
+            if event.name in shortcutKeys:
+                self.handleShortcutKeys(event)
+            elif self.shortcutSequenceLockout:
+                dPrint("Shortcut sequence lockout active, ignoring characters until reset.")
+
             # Alphanumeric character - start of word or word continuation
-            if event.name in string.ascii_letters or event.name in additionalValidChars:
+            elif event.name in string.ascii_letters or event.name in additionalValidChars:
                 if self.wordInProgress:
-                    self.wordLength += 1
+                    self.continueWord()
                 else:
-                    self.wordInProgress = True
-                    self.wordStartTime = event.time
-                    self.wordLength = 1
+                    self.startWord(event)
 
             # Space character
             elif event.name == "space":
                 if self.wordInProgress:
                     dPrint("Space detected, adding to the word length but ending the word.")
-                    self.wordLength += 1
-                    self.wordInProgress = False
+                    self.continueWord()
+                    self.recordWord(event)
                 else:
                     dPrint("Space detected, but a word wasn't in progress, therefore ignoring the character.")
 
-            # End of word or control sequence abort
+            # End of word via the use of any other character
             else:
                 dPrint('Non word character typed, ending word')
-
                 # Discard the word if the backspace is used
-                if event.name != "backspace":
-
-                    # Validate word size
-                    if minWordSize <= self.wordLength <= maxWordSize:
-                        # If valid, add to word count and typing time
-                        self.numWords += 1
-                        wordTime = event.time - self.wordStartTime
-                        self.typingTime += wordTime
-                        dPrint(f'Current word length: {self.wordLength}, time: {wordTime}, WPM: {self.calculateWPM(1, wordTime)}')
-                        print(f'Current words: {self.numWords}, time: {self.typingTime}, WPM: {self.calculateWPM()}')
-                    else:
-                        dPrint("Word too short, ignoring")
-
-                # Reset vars
-                self.wordLength = 0
-                self.wordInProgress = False
+                if event.name == "backspace":
+                    self.resetWord()
+                else:
+                    self.recordWord(event)
 
             # Adjust tracking vars
-            self.lastLetterTime = event.time
+            self.recordLastLetterTime(event)
+
+        elif event.event_type == keyboard.KEY_UP:
+            if event.name in shortcutKeys:
+                self.handleShortcutKeys(event)
 
 
 def main():
