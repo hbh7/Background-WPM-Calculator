@@ -34,8 +34,10 @@ class WPMCalculator:
     # Handle tracking current word progression information
     wordInProgress = False
     wordLength = 0
-    wordStartTime = time.time()  # Set it to some placeholder that doesn't matter but isn't None
+    # Set these times to some placeholder that doesn't matter but isn't None
+    wordStartTime = time.time()
     lastLetterTime = time.time()
+    lastWordEndTime = time.time()
     shortcutSequenceLockout = False
 
     """ Calculates and returns the WPM using self.numWords and self.typingTime, or provided values if present """
@@ -54,8 +56,12 @@ class WPMCalculator:
     """ Starts a new word by updating word tracking information """
     def startWord(self, event):
         self.wordInProgress = True
-        self.wordStartTime = event.time
         self.wordLength = 1
+        # If it's been a very short time since the previous word ended, this time should be counted for accurate counting
+        if event.time - self.lastWordEndTime < wordTimeoutSeconds:
+            self.wordStartTime = self.lastWordEndTime
+        else:
+            self.wordStartTime = event.time
 
     """ Continues a word by adding another letter and time amount to the word tracking information """
     def continueWord(self):
@@ -74,8 +80,10 @@ class WPMCalculator:
             self.numWords += 1
             if event is not None:
                 wordTime = event.time - self.wordStartTime
+                self.lastWordEndTime = event.time
             else:
                 wordTime = self.lastLetterTime - self.wordStartTime
+                self.lastWordEndTime = self.lastLetterTime
             self.typingTime += wordTime
             dPrint(f'Current word length: {self.wordLength}, time: {wordTime}, WPM: {self.calculateWPM(1, wordTime)}')
             print(f'Current words: {self.numWords}, time: {self.typingTime}, WPM: {self.calculateWPM()}')
@@ -104,10 +112,9 @@ class WPMCalculator:
 
             # Reset previous word if it's been too long since the last character has been typed
             # Note that this does not mean a new word can't also start after this
-            if event.time - self.lastLetterTime > wordTimeoutSeconds:
+            if self.wordInProgress and event.time - self.lastLetterTime > wordTimeoutSeconds:
                 dPrint('Time since last typed character exceeded, resetting word progress.')
                 self.recordWord()
-                # TODO: if a word was in progress, check if it should have been added to the count.
 
             # Shortcut sequences - don't start a word if a shortcut is being used
             if event.name in shortcutKeys:
