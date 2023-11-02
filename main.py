@@ -6,15 +6,22 @@ import string
 # turn this to True to enable debug printouts.
 debug = False
 
+# Adjust these if desired to modify exactly how words are tracked
+# Defines the minimum length of words to count
+minWordSize = 2
+# Defines the maximum length of words to count
+maxWordSize = 16
+# After this many seconds without a keypress, a word's progress is reset and not added to the WPM count.
+# This was chosen with the assumption that most people will take less than 2 seconds between typing letters.
+# If you're a fast typist, you may want to decrease this value to 1.
+# If you're a bit slower, you may want to increase it to 3.
+wordTimeoutSeconds = 2
+
+# Configure keys that modify the program's behavior
 ignoreKeys = ["shift"]
 shortcutKeys = ["ctrl", "right ctrl", "alt", "alt gr", "left windows", "right windows"]
 additionalValidChars = ["'", "\""]
-minWordSize = 2
-maxWordSize = 16
 
-# After this many seconds without a keypress, a word's progress is reset and not added to the WPM count.
-# This was chosen with the assumption that most people will take less than 3 seconds between typing letters.
-wordTimeoutSeconds = 3
 
 """ Wrapper function for only doing certain prints if the program is running in debug mode. """
 def dPrint(*args):
@@ -38,11 +45,12 @@ class WPMCalculator:
     # Handle tracking current word progression information
     wordInProgress = False
     wordLength = 0
-    # Set these times to some placeholder that doesn't matter but isn't None
+    shortcutSequenceLockout = False
+
+    # Track various times. Set these times to some placeholder that doesn't matter but isn't None
     wordStartTime = time.time() - wordTimeoutSeconds
     lastLetterTime = time.time() - wordTimeoutSeconds
     lastWordEndTime = time.time() - wordTimeoutSeconds
-    shortcutSequenceLockout = False
 
     """ Calculates and returns the WPM using self.numWords and self.typingTime, or provided values if present """
     def calculateWPM(self, numWords=None, typingTime=None):
@@ -51,6 +59,7 @@ class WPMCalculator:
             numWords = sumHashmapValues(self.numWordsByLength)
         if typingTime is None:
             typingTime = sumHashmapValues(self.wordTimeByLength)
+        # Calculate the WPM
         return numWords / (typingTime / 60)
 
     """ Records the last time a letter was typed """
@@ -61,7 +70,7 @@ class WPMCalculator:
     def startWord(self, event):
         self.wordInProgress = True
         self.wordLength = 1
-        # If it's been a very short time since the previous word ended, this time should be counted for accurate counting
+        # If it's been a very short time since the previous word ended, this time should be counted for better accuracy
         if event.time - self.lastWordEndTime < wordTimeoutSeconds:
             self.wordStartTime = self.lastWordEndTime
         else:
@@ -82,36 +91,42 @@ class WPMCalculator:
         if minWordSize <= self.wordLength <= maxWordSize:
             # If valid, add to word count and typing time
             self.numWordsByLength[self.wordLength] = self.numWordsByLength.get(self.wordLength, 0) + 1
+            # If an event was provided, use the times from it, otherwise use the last letter time
             if event is not None:
                 wordTime = event.time - self.wordStartTime
                 self.lastWordEndTime = event.time
             else:
                 wordTime = self.lastLetterTime - self.wordStartTime
                 self.lastWordEndTime = self.lastLetterTime
+            # Update counters and print stats
             self.wordTimeByLength[self.wordLength] = self.wordTimeByLength.get(self.wordLength, 0) + wordTime
             self.printWordStats(wordTime)
             self.printAllStats()
         else:
             dPrint("Word too short, ignoring")
-
+        # Reset counters
         self.resetWord()
 
     """ Helper function to handle shortcut sequence keys by setting/unsetting tracking values """
     def handleShortcutKeys(self, event):
         if event.event_type == keyboard.KEY_DOWN:
             self.shortcutSequenceLockout = True
+            # If a shortcut sequence is started, reset the word for good measure
             self.resetWord()
-
         elif event.event_type == keyboard.KEY_UP:
             self.shortcutSequenceLockout = False
 
     """ Function to print out statistics for the current word """
     def printWordStats(self, wordTime):
-        dPrint(f'Current word length: {self.wordLength}, time: {wordTime:.5f}, WPM: {self.calculateWPM(1, wordTime):.2f}')
+        print(f'Previous word length: {self.wordLength}, '
+              f'time: {wordTime:.5f} seconds, '
+              f'WPM: {self.calculateWPM(1, wordTime):.2f}')
 
     """ Function to print out statistics about all words """
     def printAllStats(self):
-        print(f'Total words: {sumHashmapValues(self.numWordsByLength)}, time: {sumHashmapValues(self.wordTimeByLength):.2f}, WPM: {self.calculateWPM():.2f}')
+        print(f'Total words: {sumHashmapValues(self.numWordsByLength)}, '
+              f'time: {sumHashmapValues(self.wordTimeByLength):.2f} seconds, '
+              f'WPM: {self.calculateWPM():.2f}')
         # Print stats based around the lengths of words
         for length in sorted(self.numWordsByLength.keys()):
             number = self.numWordsByLength[length]
@@ -124,6 +139,7 @@ class WPMCalculator:
     def processEvent(self, event):
         if event.event_type == keyboard.KEY_DOWN:
             dPrint("New Keypress:", event.to_json())
+
             # Ignore certain keys
             if event.name in ignoreKeys:
                 return
@@ -164,19 +180,21 @@ class WPMCalculator:
                 else:
                     self.recordWord(event)
 
-            # Adjust tracking vars
+            # Record when the last letter was typed for use later
             self.recordLastLetterTime(event)
 
+        # Check for key_up events to use with shortcut tracking
         elif event.event_type == keyboard.KEY_UP:
             if event.name in shortcutKeys:
                 self.handleShortcutKeys(event)
 
 
+""" Main function that creates the class instance and starts watching for keyboard events """
 def main():
     calc = WPMCalculator()
 
     while True:
-        # Wait for the next keypress event
+        # Wait for the next keypress event and send it for processing.
         event = keyboard.read_event()
         calc.processEvent(event)
 
