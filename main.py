@@ -4,7 +4,7 @@ import string
 
 # If you want more insight into what the program is doing with your actual key presses, or you want to debug the program,
 # turn this to True to enable debug printouts.
-debug = True
+debug = False
 
 ignoreKeys = ["shift"]
 shortcutKeys = ["ctrl", "right ctrl", "alt", "alt gr", "left windows", "right windows"]
@@ -22,15 +22,18 @@ def dPrint(*args):
         print(*args)
 
 
+""" Helper function to sum up all values in the hashmap """
+def sumHashmapValues(h):
+    return sum(h.values())
+
+
 """ Main class that helps to track all information for WPM calculations """
 class WPMCalculator:
     # Setup instance vars
     # Handle overall statistic tracking
-    numWords = 0
     # Hashmaps with keys of length and values of number of words / word type times for those lengths
     numWordsByLength = {}
     wordTimeByLength = {}
-    typingTime = 0
 
     # Handle tracking current word progression information
     wordInProgress = False
@@ -45,9 +48,9 @@ class WPMCalculator:
     def calculateWPM(self, numWords=None, typingTime=None):
         # Can't set self.x variables as a default arguments, so we use these if statements as a workaround
         if numWords is None:
-            numWords = self.numWords
+            numWords = sumHashmapValues(self.numWordsByLength)
         if typingTime is None:
-            typingTime = self.typingTime
+            typingTime = sumHashmapValues(self.wordTimeByLength)
         return numWords / (typingTime / 60)
 
     """ Records the last time a letter was typed """
@@ -78,16 +81,16 @@ class WPMCalculator:
         # Validate word size
         if minWordSize <= self.wordLength <= maxWordSize:
             # If valid, add to word count and typing time
-            self.numWords += 1
+            self.numWordsByLength[self.wordLength] = self.numWordsByLength.get(self.wordLength, 0) + 1
             if event is not None:
                 wordTime = event.time - self.wordStartTime
                 self.lastWordEndTime = event.time
             else:
                 wordTime = self.lastLetterTime - self.wordStartTime
                 self.lastWordEndTime = self.lastLetterTime
-            self.typingTime += wordTime
-            dPrint(f'Current word length: {self.wordLength}, time: {wordTime}, WPM: {self.calculateWPM(1, wordTime)}')
-            print(f'Current words: {self.numWords}, time: {self.typingTime}, WPM: {self.calculateWPM()}')
+            self.wordTimeByLength[self.wordLength] = self.wordTimeByLength.get(self.wordLength, 0) + wordTime
+            self.printWordStats(wordTime)
+            self.printAllStats()
         else:
             dPrint("Word too short, ignoring")
 
@@ -101,6 +104,21 @@ class WPMCalculator:
 
         elif event.event_type == keyboard.KEY_UP:
             self.shortcutSequenceLockout = False
+
+    """ Function to print out statistics for the current word """
+    def printWordStats(self, wordTime):
+        dPrint(f'Current word length: {self.wordLength}, time: {wordTime:.5f}, WPM: {self.calculateWPM(1, wordTime):.2f}')
+
+    """ Function to print out statistics about all words """
+    def printAllStats(self):
+        print(f'Total words: {sumHashmapValues(self.numWordsByLength)}, time: {sumHashmapValues(self.wordTimeByLength):.2f}, WPM: {self.calculateWPM():.2f}')
+        # Print stats based around the lengths of words
+        for length in sorted(self.numWordsByLength.keys()):
+            number = self.numWordsByLength[length]
+            typeTime = self.wordTimeByLength[length]
+            wpm = self.calculateWPM(number, typeTime)
+            print(f'Words of size {length}: {number} typed, took {typeTime:.2f} seconds, {wpm:.2f} average WPM.')
+        print("-" * 10)
 
     """ Handles whenever a keyboard event is received """
     def processEvent(self, event):
@@ -165,4 +183,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
