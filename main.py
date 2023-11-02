@@ -9,7 +9,7 @@ debug = True
 ignoreKeys = ["shift"]
 shortcutKeys = ["ctrl", "right ctrl", "alt", "alt gr", "left windows", "right windows"]
 additionalValidChars = ["'", "\""]
-minWordSize = 3  # Note that this includes the space at the end of words
+minWordSize = 2
 maxWordSize = 16
 
 # After this many seconds without a keypress, a word's progress is reset and not added to the WPM count.
@@ -132,8 +132,7 @@ class WPMCalculator:
             # Space character
             elif event.name == "space":
                 if self.wordInProgress:
-                    dPrint("Space detected, adding to the word length but ending the word.")
-                    self.continueWord()
+                    dPrint("Space detected, ending the word.")
                     self.recordWord(event)
                 else:
                     dPrint("Space detected, but a word wasn't in progress, therefore ignoring the character.")
